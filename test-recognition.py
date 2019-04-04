@@ -11,7 +11,7 @@
 
 from cv_utils import *
 from irisrec_db_interface import *
-from matplotlib import pyplot as plt
+import math
 
 #getting images
 # irisRec = IrisRec()
@@ -26,19 +26,43 @@ for image in images:
     my_utils.add_to_plot(image, [0,0])
 
     blurSquareWindow = (20,20)
-    blurredImage = my_utils.smooth(image, blurSquareWindow, [0,1])
-    blurredImage = my_utils.smooth(blurredImage, blurSquareWindow, [0, 1])
+    blurredImage = my_utils.smooth_blur(image, blurSquareWindow, [0, 1])
+    blurredImage = my_utils.smooth_blur(blurredImage, blurSquareWindow, [1, 1])
+
+    # blurSquareWindow = (5, 5)
+    # gaussianBlurredImage = my_utils.smooth_gaussian_blur(image, blurSquareWindow, [1, 0])
 
     minTreshold = 100
     maxTreshold = 180
     pupilMaskBinary = my_utils.grayscale_threshold(blurredImage, minTreshold, maxTreshold, [1,0])
 
+    blurSquareWindow = (5, 5)
+    gaussianBlurredImage = my_utils.smooth_gaussian_blur(pupilMaskBinary, blurSquareWindow, [2, 0])
+
+    # minTreshold = 100
+    # maxTreshold = 180
+    # pupilMaskBinary = my_utils.grayscale_threshold(gaussianBlurredImage, minTreshold, maxTreshold, [2, 0])
+
     dp = 1
-    minDist = 55
+    minDist = math.sqrt(image.size)/8
     minRadius = 0
     maxRadius = 0
-    param1 = 65
-    param2 = 35
-    circles = my_utils.get_circles(pupilMaskBinary, dp, minDist, param1, param2, minRadius, maxRadius, [1,1])
+    param1 = 100
+    param2 = 10
+    pupilCircle = my_utils.get_circles(pupilMaskBinary, dp, minDist, param1, param2, minRadius, maxRadius, [2,1])
+
+    irisCircle = pupilCircle
+    # irisCircle[2] += 65
+    my_utils.draw_circle(irisCircle, image)
+    my_utils.draw_circle(pupilCircle, image, 1)
+    my_utils.add_to_plot(image, [0,0])
+
+    irisCenter = (irisCircle[0], irisCircle[1])
+    irisRadius = irisCircle[2]
+
+    crop_initial = (math.ceil(irisCenter[0] - irisRadius), math.ceil(irisCenter[1] - irisRadius))
+    crop_final = (math.ceil(irisCenter[0] + irisRadius), math.ceil(irisCenter[1] + irisRadius))
+    cropped_image = my_utils.crop_image(image, crop_initial, crop_final)
+    my_utils.add_to_plot(cropped_image, [0, 0])
 
     my_utils.plot()
