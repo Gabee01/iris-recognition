@@ -100,15 +100,15 @@ for image in images:
     my_utils.add_to_plot(cropped_image, [2,1])
 
     # creates an polar coordinate system representing the iris extracted
-    twoTimesPi = math.ceil(2 * np.pi)
     radianInterval = 200
-    resultWidth = twoTimesPi * radianInterval
+    twoTimesPi = 2 * np.pi
+    reasultWidth = math.ceil(radianInterval * twoTimesPi)
 
     irisRadius = math.ceil(irisRadius)
     pupilRadius = math.floor(pupilRadius)
     resultHeight = irisRadius - pupilRadius
 
-    new_image = my_utils.create_blank(resultWidth, resultHeight)
+    polar_image = my_utils.create_blank(reasultWidth, resultHeight)
     for radius in range(pupilRadius, irisRadius):
         rads = np.arange(0, twoTimesPi , 1/radianInterval)
         for radian in rads:
@@ -122,12 +122,11 @@ for image in images:
             pixel = image_copy[x, y]
             concentricCirclesImage[x, y] = 0
 
-            # radius = math.sqrt(math.pow(x, 2) + math.pow(y, 2))
+            my_utils.plot_pixel(polar_image, math.floor(radian * radianInterval), math.floor(radius), pixel)
 
-            my_utils.plot_pixel(new_image, math.floor(radius), math.floor(radian * radianInterval), pixel)
-
-    my_utils.add_to_plot(new_image, [3,1])
-    my_utils.add_to_plot(concentricCirclesImage, [4, 1])
+    my_utils.add_to_plot(concentricCirclesImage, [3, 1])
+    my_utils.add_to_plot(polar_image, [4, 1])
+    my_utils.add_to_plot(image_copy, [4,0])
 
 
     # plot images added to plot

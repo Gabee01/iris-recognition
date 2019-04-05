@@ -52,7 +52,7 @@ class CvUtils:
         raise NotImplemented()
 
     def create_blank(self, width, height):
-        blank_image = np.zeros((height, width), np.uint8)
+        blank_image = np.zeros((height, width, 3), np.uint8)
         return blank_image
 
     def get_blank_copy(self, image):
