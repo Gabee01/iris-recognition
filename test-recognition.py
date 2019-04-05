@@ -22,47 +22,79 @@ images = casiaIris.EyeImages
 
 
 for image in images:
-    my_utils = CvUtils()
+    plot_lines = 4
+    plot_cols = 2
+    my_utils = CvUtils(plot_lines, plot_cols)
+
+    # Plot original image
     my_utils.add_to_plot(image, [0,0])
 
+    # generate and plot blurred image using avarage of square
     blurSquareWindow = (20,20)
-    blurredImage = my_utils.smooth_blur(image, blurSquareWindow, [0, 1])
-    blurredImage = my_utils.smooth_blur(blurredImage, blurSquareWindow, [1, 1])
+    blurredImage = my_utils.smooth_blur(image, blurSquareWindow)
+    blurredImage = my_utils.smooth_blur(blurredImage, blurSquareWindow)
 
-    # blurSquareWindow = (5, 5)
-    # gaussianBlurredImage = my_utils.smooth_gaussian_blur(image, blurSquareWindow, [1, 0])
+    my_utils.add_to_plot(blurredImage, [1, 0])
 
+    # generate and plot grayscale pupil image
     minTreshold = 100
     maxTreshold = 180
-    pupilMaskBinary = my_utils.grayscale_threshold(blurredImage, minTreshold, maxTreshold, [1,0])
+    pupilMaskBinary = my_utils.grayscale_threshold(blurredImage, minTreshold, maxTreshold)
 
-    blurSquareWindow = (5, 5)
-    gaussianBlurredImage = my_utils.smooth_gaussian_blur(pupilMaskBinary, blurSquareWindow, [2, 0])
+    my_utils.add_to_plot(pupilMaskBinary, [2, 0])
 
-    # minTreshold = 100
-    # maxTreshold = 180
-    # pupilMaskBinary = my_utils.grayscale_threshold(gaussianBlurredImage, minTreshold, maxTreshold, [2, 0])
+    # applies gaussian blur to pupil image and plot
+    blurSquareWindow = (15, 15)
+    gaussianBlurredImage = my_utils.smooth_gaussian_blur(pupilMaskBinary, blurSquareWindow)
 
+    my_utils.add_to_plot(gaussianBlurredImage , [3, 0])
+
+    # generates and plot a blank image with the pupil circle drawn
     dp = 1
     minDist = math.sqrt(image.size)/8
     minRadius = 0
     maxRadius = 0
     param1 = 100
     param2 = 10
-    pupilCircle = my_utils.get_circles(pupilMaskBinary, dp, minDist, param1, param2, minRadius, maxRadius, [2,1])
+    pupilCircle, pupilCircleImage = my_utils.get_first_circle(pupilMaskBinary, dp, minDist, param1, param2, minRadius, maxRadius)
+    my_utils.add_to_plot(pupilCircleImage, [0,1])
 
-    irisCircle = pupilCircle
-    # irisCircle[2] += 65
-    my_utils.draw_circle(irisCircle, image)
-    my_utils.draw_circle(pupilCircle, image, 1)
-    my_utils.add_to_plot(image, [0,0])
-
+    # gets a concentric circle to identify the iris and plot
+    irisCircle = pupilCircle[:]
+    irisCircle[2] += 60
     irisCenter = (irisCircle[0], irisCircle[1])
     irisRadius = irisCircle[2]
 
-    crop_initial = (math.ceil(irisCenter[0] - irisRadius), math.ceil(irisCenter[1] - irisRadius))
-    crop_final = (math.ceil(irisCenter[0] + irisRadius), math.ceil(irisCenter[1] + irisRadius))
-    cropped_image = my_utils.crop_image(image, crop_initial, crop_final)
-    my_utils.add_to_plot(cropped_image, [0, 0])
+    if ((irisCenter[0] + irisRadius > math.sqrt(image.size))
+        or (irisCenter[1] + irisRadius > math.sqrt(image.size))):
 
+        irisRadius -= (irisRadius - math.sqrt(image.size))
+    elif ((irisCenter[0] - irisRadius < 0)
+        or (irisCenter[1] - irisRadius < 0)):
+        irisRadius -= (-1 * irisRadius)
+
+    # creates and plot image with pupil and iris circles
+    concentricCirclesImage = pupilCircleImage[:]
+    my_utils.draw_circle(irisCircle, concentricCirclesImage)
+    my_utils.add_to_plot(concentricCirclesImage, [1,1])
+
+    # crops the image on the edges of the iris circle and plot
+    crop_initial = (irisCenter[0] - irisRadius, irisCenter[1] - irisRadius)
+    if (crop_initial[0] < 0):
+        crop_initial = 0, crop_initial[1]
+    if (crop_initial[1] < 0):
+        crop_initial = crop_initial[0], 0
+
+    crop_final = (irisCenter[0] + irisRadius, irisCenter[1] + irisRadius)
+    if (crop_final[0] > math.sqrt(image.size)):
+        crop_final = math.sqrt(image.size), crop_final[1]
+    if (crop_final[1] > math.sqrt(image.size)):
+        crop_final = crop_final[0], math.sqrt(image.size)
+
+    crop_initial = math.floor(crop_initial[0]), math.floor(crop_initial[1])
+    crop_final = math.floor(crop_final[0]), math.floor(crop_final[1])
+
+    cropped_image = my_utils.crop_image(image, crop_initial, crop_final)
+    my_utils.add_to_plot(cropped_image, [2,1])
+    # plot images added to plot
     my_utils.plot()

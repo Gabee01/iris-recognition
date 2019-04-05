@@ -5,8 +5,8 @@ from matplotlib.patches import Circle
 
 class CvUtils:
 
-    def __init__(self):
-        self._fig, self._aplt = plt.subplots(3, 2)
+    def __init__(self, plotLines, plotCols):
+        self._fig, self._aplt = plt.subplots(plotLines, plotCols)
 
     def plot(self):
         plt.pause(0.3)
@@ -24,39 +24,37 @@ class CvUtils:
         return image[initialCoordinates[1]: finalCoordinates[1], initialCoordinates[0]:finalCoordinates[0]]
 
     # Smoothes the image and plot
-    def smooth_blur(self, image, blurSquareWindow, positionToPlot):
+    def smooth_blur(self, image, blurSquareWindow):
         blurred_image = cv2.blur(image, blurSquareWindow)
 
-        self.add_to_plot(blurred_image, positionToPlot)
         return blurred_image
 
     # Smoothes the image and plot
-    def smooth_gaussian_blur(self, image, blurSquareWindow, positionToPlot):
+    def smooth_gaussian_blur(self, image, blurSquareWindow):
         blurred_image = cv2.GaussianBlur(image, blurSquareWindow, 0)
 
-        self.add_to_plot(blurred_image, positionToPlot)
         return blurred_image
 
-    def grayscale_threshold(self, image, minTreshold, maxTreshold, positionToPlot):
+    def grayscale_threshold(self, image, minTreshold, maxTreshold):
         ret, treshold_applied_image = cv2.threshold(image, minTreshold, maxTreshold, cv2.THRESH_BINARY)
 
-        self.add_to_plot(treshold_applied_image, positionToPlot)
         return treshold_applied_image
 
-    def get_circles(self, singleChannelImage, dpAccumulator, centerMinDistance, param1, param2, minRadius, maxRadius, positionToPlot):
+    def get_first_circle(self, singleChannelImage, dpAccumulator, centerMinDistance, param1, param2, minRadius, maxRadius):
         circles = cv2.HoughCircles(singleChannelImage, cv2.HOUGH_GRADIENT, dpAccumulator, centerMinDistance, param1=param1, param2=param2, minRadius= minRadius, maxRadius=maxRadius)
 
         for circle in circles[0, :]:
-            self.draw_circle(circle, singleChannelImage)
-            self.add_to_plot(singleChannelImage, positionToPlot)
-            return circle
-
-        # return circles
+            blank_copy = self.get_blank_copy(singleChannelImage)
+            self.draw_circle(circle, blank_copy)
+            return circle, blank_copy
 
     def bilinear_interpolation(image, pt0, pt1,pts):
         raise NotImplemented()
 
-
+    def get_blank_copy(self, image):
+        blank_copy = image[:]
+        blank_copy[:, 0: blank_copy.size] = 1
+        return blank_copy
 
 # Thresholds kinds
     # ret, thresh2 = cv2.threshold(image, 127, 255, cv2.THRESH_BINARY_INV)
