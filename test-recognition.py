@@ -22,10 +22,11 @@ images = casiaIris.EyeImages
 
 
 for image in images:
-    plot_lines = 4
+    plot_lines = 5
     plot_cols = 2
     my_utils = CvUtils(plot_lines, plot_cols)
 
+    image_copy = image[:]
     # Plot original image
     my_utils.add_to_plot(image, [0,0])
 
@@ -57,6 +58,7 @@ for image in images:
     param1 = 100
     param2 = 10
     pupilCircle, pupilCircleImage = my_utils.get_first_circle(pupilMaskBinary, dp, minDist, param1, param2, minRadius, maxRadius)
+    pupilRadius = pupilCircle[2]
     my_utils.add_to_plot(pupilCircleImage, [0,1])
 
     # gets a concentric circle to identify the iris and plot
@@ -96,5 +98,37 @@ for image in images:
 
     cropped_image = my_utils.crop_image(image, crop_initial, crop_final)
     my_utils.add_to_plot(cropped_image, [2,1])
+
+    # creates an polar coordinate system representing the iris extracted
+    twoTimesPi = math.ceil(2 * np.pi)
+    radianInterval = 200
+    resultWidth = twoTimesPi * radianInterval
+
+    irisRadius = math.ceil(irisRadius)
+    pupilRadius = math.floor(pupilRadius)
+    resultHeight = irisRadius - pupilRadius
+
+    new_image = my_utils.create_blank(resultWidth, resultHeight)
+    for radius in range(pupilRadius, irisRadius):
+        rads = np.arange(0, twoTimesPi , 1/radianInterval)
+        for radian in rads:
+            # x = r * cos(ø)
+            # y = r * sen(ø)
+
+            x = math.floor((radius * math.cos(radian)) + irisCenter[1])
+            y = math.floor((radius * math.sin(radian)) + irisCenter[0])
+
+            # if (radian < np.pi / 2):
+            pixel = image_copy[x, y]
+            concentricCirclesImage[x, y] = 0
+
+            # radius = math.sqrt(math.pow(x, 2) + math.pow(y, 2))
+
+            my_utils.plot_pixel(new_image, math.floor(radius), math.floor(radian * radianInterval), pixel)
+
+    my_utils.add_to_plot(new_image, [3,1])
+    my_utils.add_to_plot(concentricCirclesImage, [4, 1])
+
+
     # plot images added to plot
     my_utils.plot()

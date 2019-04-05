@@ -51,10 +51,21 @@ class CvUtils:
     def bilinear_interpolation(image, pt0, pt1,pts):
         raise NotImplemented()
 
+    def create_blank(self, width, height):
+        blank_image = np.zeros((height, width), np.uint8)
+        return blank_image
+
     def get_blank_copy(self, image):
         blank_copy = image[:]
         blank_copy[:, 0: blank_copy.size] = 1
         return blank_copy
+
+    def get_dimensions(self, image):
+        return image.shape
+
+    def plot_pixel(self, new_image, x, y, pixel):
+        new_image[x:y] = pixel
+
 
 # Thresholds kinds
     # ret, thresh2 = cv2.threshold(image, 127, 255, cv2.THRESH_BINARY_INV)
