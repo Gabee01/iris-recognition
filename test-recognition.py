@@ -1,133 +1,111 @@
 #!/usr/bin/python
 
-# This program first apply an gaussian blur filter to better distribute the collors
-# than it finds a binary mask identifing the pupil
-# then from this mask it's possible to find a concentric circle
-# that represents an aproximation of the iris space in the picture
-# that aproximation has an bilinear interpolation applyed,
-# wich results in the linear (rectangular) image,
-# where we can apply another binaryzation, finding the final image
-# to be compared when trying to match an known iris.
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+from cv_utils import CvUtils
+from irisrec_db_interface import CASIAIris
+from feature_extraction import extract_features, extract_lbp_features
+from matching import match_templates, find_best_match
+import logging
 
-from cv_utils import *
-from irisrec_db_interface import *
-import math
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-#getting images
-# irisRec = IrisRec()
-casiaIris = CASIAIris()
-# ubiIris = UBIRIS()
+def process_image(image, my_utils):
+    try:
+        # Plot original image
+        my_utils.add_to_plot(image, [0,0])
 
-images = casiaIris.EyeImages
+        # Preprocessing
+        blurSquareWindow = (20,20)
+        blurredImage = my_utils.smooth_blur(image, blurSquareWindow)
+        blurredImage = my_utils.smooth_blur(blurredImage, blurSquareWindow)
+        my_utils.add_to_plot(blurredImage, [1, 0])
 
+        # Pupil detection
+        minTreshold, maxTreshold = 100, 180
+        pupilMaskBinary = my_utils.grayscale_threshold(blurredImage, minTreshold, maxTreshold)
+        my_utils.add_to_plot(pupilMaskBinary, [2, 0])
 
-for image in images:
-    plot_lines = 5
-    plot_cols = 2
-    my_utils = CvUtils(plot_lines, plot_cols)
+        # Iris localization
+        pupilCircle, pupilCircleImage = my_utils.get_first_circle(pupilMaskBinary, 1, np.sqrt(image.size)/8, 100, 10, 0, 0)
+        my_utils.add_to_plot(pupilCircleImage, [0,1])
 
-    image_copy = image[:]
-    # Plot original image
-    my_utils.add_to_plot(image, [0,0])
+        irisCircle = list(pupilCircle)
+        irisCircle[2] += 60
+        irisCenter = (irisCircle[0], irisCircle[1])
+        irisRadius = min(irisCircle[2], np.sqrt(image.size) - max(irisCenter))
 
-    # generate and plot blurred image using avarage of square
-    blurSquareWindow = (20,20)
-    blurredImage = my_utils.smooth_blur(image, blurSquareWindow)
-    blurredImage = my_utils.smooth_blur(blurredImage, blurSquareWindow)
+        # Create image with pupil and iris circles
+        concentricCirclesImage = pupilCircleImage.copy()
+        my_utils.draw_circle(irisCircle, concentricCirclesImage)
+        my_utils.add_to_plot(concentricCirclesImage, [1,1])
 
-    my_utils.add_to_plot(blurredImage, [1, 0])
+        # Normalization
+        normalized_iris = normalize_iris(image, pupilCircle, irisCircle)
+        my_utils.add_to_plot(normalized_iris, [2,1])
 
-    # generate and plot grayscale pupil image
-    minTreshold = 100
-    maxTreshold = 180
-    pupilMaskBinary = my_utils.grayscale_threshold(blurredImage, minTreshold, maxTreshold)
+        # Feature extraction
+        gabor_features = extract_features(normalized_iris)
+        lbp_features = extract_lbp_features(normalized_iris)
 
-    my_utils.add_to_plot(pupilMaskBinary, [2, 0])
+        return gabor_features, lbp_features
 
-    # applies gaussian blur to pupil image and plot
-    blurSquareWindow = (15, 15)
-    gaussianBlurredImage = my_utils.smooth_gaussian_blur(pupilMaskBinary, blurSquareWindow)
+    except Exception as e:
+        logging.error(f"Error processing image: {str(e)}")
+        return None, None
 
-    my_utils.add_to_plot(gaussianBlurredImage , [3, 0])
+def normalize_iris(image, pupil_circle, iris_circle):
+    height, width = 64, 512
+    normalized = np.zeros((height, width))
 
-    # generates and plot a blank image with the pupil circle drawn
-    dp = 1
-    minDist = math.sqrt(image.size)/8
-    minRadius = 0
-    maxRadius = 0
-    param1 = 100
-    param2 = 10
-    pupilCircle, pupilCircleImage = my_utils.get_first_circle(pupilMaskBinary, dp, minDist, param1, param2, minRadius, maxRadius)
-    pupilRadius = pupilCircle[2]
-    my_utils.add_to_plot(pupilCircleImage, [0,1])
+    pupil_center, pupil_radius = pupil_circle[:2], pupil_circle[2]
+    iris_center, iris_radius = iris_circle[:2], iris_circle[2]
 
-    # gets a concentric circle to identify the iris and plot
-    irisCircle = pupilCircle[:]
-    irisCircle[2] += 60
-    irisCenter = (irisCircle[0], irisCircle[1])
-    irisRadius = irisCircle[2]
+    for y in range(height):
+        for x in range(width):
+            theta = 2 * np.pi * x / width
+            r = y / height
 
-    if ((irisCenter[0] + irisRadius > math.sqrt(image.size))
-        or (irisCenter[1] + irisRadius > math.sqrt(image.size))):
+            rx = (1-r) * pupil_radius + r * iris_radius
+            ry = rx
 
-        irisRadius -= (irisRadius - math.sqrt(image.size))
-    elif ((irisCenter[0] - irisRadius < 0)
-        or (irisCenter[1] - irisRadius < 0)):
-        irisRadius -= (-1 * irisRadius)
+            px = int(pupil_center[0] + rx * np.cos(theta))
+            py = int(pupil_center[1] + ry * np.sin(theta))
 
-    # creates and plot image with pupil and iris circles
-    concentricCirclesImage = pupilCircleImage[:]
-    my_utils.draw_circle(irisCircle, concentricCirclesImage)
-    my_utils.add_to_plot(concentricCirclesImage, [1,1])
+            if 0 <= px < image.shape[1] and 0 <= py < image.shape[0]:
+                normalized[y, x] = image[py, px]
 
-    # crops the image on the edges of the iris circle and plot
-    crop_initial = (irisCenter[0] - irisRadius, irisCenter[1] - irisRadius)
-    if (crop_initial[0] < 0):
-        crop_initial = 0, crop_initial[1]
-    if (crop_initial[1] < 0):
-        crop_initial = crop_initial[0], 0
+    return normalized
 
-    crop_final = (irisCenter[0] + irisRadius, irisCenter[1] + irisRadius)
-    if (crop_final[0] > math.sqrt(image.size)):
-        crop_final = math.sqrt(image.size), crop_final[1]
-    if (crop_final[1] > math.sqrt(image.size)):
-        crop_final = crop_final[0], math.sqrt(image.size)
+def main():
+    casiaIris = CASIAIris()
+    images = casiaIris.EyeImages
 
-    crop_initial = math.floor(crop_initial[0]), math.floor(crop_initial[1])
-    crop_final = math.floor(crop_final[0]), math.floor(crop_final[1])
+    gallery_features_gabor = []
+    gallery_features_lbp = []
 
-    cropped_image = my_utils.crop_image(image, crop_initial, crop_final)
-    my_utils.add_to_plot(cropped_image, [2,1])
+    for i, image in enumerate(images):
+        my_utils = CvUtils(3, 2)
+        gabor_features, lbp_features = process_image(image, my_utils)
+        
+        if gabor_features is not None and lbp_features is not None:
+            gallery_features_gabor.append(gabor_features)
+            gallery_features_lbp.append(lbp_features)
+            
+            if i == 0:  # Use the first image as a probe for demonstration
+                probe_features_gabor = gabor_features
+                probe_features_lbp = lbp_features
 
-    # creates an polar coordinate system representing the iris extracted
-    radianInterval = 200
-    twoTimesPi = 2 * np.pi
-    reasultWidth = math.ceil(radianInterval * twoTimesPi)
+        my_utils.plot()
 
-    irisRadius = math.ceil(irisRadius)
-    pupilRadius = math.floor(pupilRadius)
-    resultHeight = irisRadius - pupilRadius
+    # Matching demonstration
+    best_match_gabor, distance_gabor = find_best_match(probe_features_gabor, gallery_features_gabor)
+    best_match_lbp, distance_lbp = find_best_match(probe_features_lbp, gallery_features_lbp)
 
-    polar_image = my_utils.create_blank(reasultWidth, resultHeight)
-    for radius in range(pupilRadius, irisRadius):
-        rads = np.arange(0, twoTimesPi , 1/radianInterval)
-        for radian in rads:
-            # x = r * cos(ø)
-            # y = r * sen(ø)
+    logging.info(f"Best match (Gabor): Image {best_match_gabor}, Distance: {distance_gabor}")
+    logging.info(f"Best match (LBP): Image {best_match_lbp}, Distance: {distance_lbp}")
 
-            x = math.floor((radius * math.cos(radian)) + irisCenter[1])
-            y = math.floor((radius * math.sin(radian)) + irisCenter[0])
-
-            # if (radian < np.pi / 2):
-            pixel = image_copy[x, y]
-            concentricCirclesImage[x, y] = 0
-
-            my_utils.plot_pixel(polar_image, math.floor(radian * radianInterval), math.floor(radius), pixel)
-
-    my_utils.add_to_plot(concentricCirclesImage, [3, 1])
-    my_utils.add_to_plot(polar_image, [4, 1])
-    my_utils.add_to_plot(image_copy, [4,0])
-
-
-    # plot images added to plot
-    my_utils.plot()
+if __name__ == "__main__":
+    main()
